@@ -336,6 +336,24 @@
             text-align: left;
         }
 
+        .header-title-generic {
+            color: var(--primary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        /* Hide specific elements based on minimized state to prevent repeated text */
+        .dashboard:not(.minimized) #target-name {
+            display: none;
+        }
+        
+        .dashboard.minimized .header-title-generic {
+            display: none;
+        }
+
         @media (max-width: 768px) {
             header {
                 padding: 10px;
@@ -420,13 +438,15 @@
         <div class="glass-panel dashboard" id="dashboard">
             <div class="dashboard-header">
                 <div id="target-name">Select Destination</div>
+                <div class="header-title-generic">Telemetry Link</div>
                 <div class="minimize-btn" onclick="toggleDashboard()" id="dash-toggle">−</div>
             </div>
             
             <div id="dashboard-scroll-container">
                 <img id="dashboard-img" class="alien-image" src="" alt="Daily View" onclick="openImageModal(this.src)">
                 <div id="dashboard-content">
-                    <div class="data-point" style="margin-top: 10px;">
+                    <h2 id="target-name-content" style="margin: 0 0 10px 0; font-size: 1.6rem; color: #fff;">Select Destination</h2>
+                    <div class="data-point" style="margin-top: 5px;">
                         <h3>Captain's Log</h3>
                         <p id="target-log" style="font-size: 0.9rem; margin-top: 5px;">Establishing Uplink...</p>
                     </div>
@@ -901,6 +921,7 @@
             if (dashToggle) dashToggle.textContent = '−';
 
             document.getElementById('target-name').innerText = data.DisplayName || "Unknown Sector";
+            document.getElementById('target-name-content').innerText = data.DisplayName || "Unknown Sector";
             document.getElementById('target-log').innerText = data.LogEntry || "No data.";
             document.getElementById('target-fact').innerText = data.Fact || "";
 
