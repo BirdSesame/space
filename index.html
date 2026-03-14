@@ -245,6 +245,73 @@
             border-right: none;
             flex-shrink: 0;
             order: -1;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .alien-image:hover {
+            opacity: 0.8;
+        }
+
+        /* Image Modal */
+        .image-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        .image-modal.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .image-modal img {
+            max-width: 95vw;
+            max-height: 95vh;
+            object-fit: contain;
+            border: 2px solid var(--primary);
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 243, 255, 0.3);
+            transform: scale(0.95);
+            transition: transform 0.3s ease;
+        }
+
+        .image-modal.show img {
+            transform: scale(1);
+        }
+
+        .image-modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            background: rgba(0, 0, 0, 0.5);
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            border: 1px solid var(--glass-border);
+            transition: background 0.2s;
+        }
+
+        .image-modal-close:hover {
+            background: var(--primary);
+            color: var(--dark-bg);
         }
 
         .data-point h3 {
@@ -357,7 +424,7 @@
             </div>
             
             <div id="dashboard-scroll-container">
-                <img id="dashboard-img" class="alien-image" src="" alt="Daily View">
+                <img id="dashboard-img" class="alien-image" src="" alt="Daily View" onclick="openImageModal(this.src)">
                 <div id="dashboard-content">
                     <div class="data-point" style="margin-top: 10px;">
                         <h3>Captain's Log</h3>
@@ -378,13 +445,34 @@
         </div>
     </div>
 
+    <!-- Image Modal -->
+    <div id="image-modal" class="image-modal" onclick="closeImageModal()">
+        <div class="image-modal-close">×</div>
+        <img id="modal-img" src="" alt="Full Size View">
+    </div>
+
     <script>
-        // --- 1. GLOBAL DATA PAYLOADS ---
         function toggleDashboard() {
             const dash = document.getElementById('dashboard');
             const btn = document.getElementById('dash-toggle');
             const isMinimized = dash.classList.toggle('minimized');
             btn.textContent = isMinimized ? '+' : '−';
+        }
+
+        function openImageModal(src) {
+            if (!src) return;
+            const modal = document.getElementById('image-modal');
+            const modalImg = document.getElementById('modal-img');
+            modalImg.src = src;
+            modal.classList.add('show');
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('image-modal');
+            modal.classList.remove('show');
+            setTimeout(() => {
+                document.getElementById('modal-img').src = "";
+            }, 300); // Clear after animation
         }
 
         let journeyData = [];
