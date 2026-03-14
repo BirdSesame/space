@@ -115,7 +115,8 @@
 
         /* Log Entry Styling inside Dashboard */
         .log-navigation-bar {
-            grid-column: 1 / -1; /* Spans across both columns on desktop grid */
+            grid-column: 1 / -1;
+            /* Spans across both columns on desktop grid */
             display: flex;
             align-items: center;
             gap: 15px;
@@ -131,9 +132,12 @@
             flex: 1;
             padding: 5px 0;
             scrollbar-width: none;
+            position: relative;
         }
 
-        .day-selector::-webkit-scrollbar { display: none; }
+        .day-selector::-webkit-scrollbar {
+            display: none;
+        }
 
         .day-chip {
             padding: 6px 12px;
@@ -166,7 +170,10 @@
             text-transform: uppercase;
         }
 
-        .nav-btn:hover { background: var(--primary); color: var(--dark-bg); }
+        .nav-btn:hover {
+            background: var(--primary);
+            color: var(--dark-bg);
+        }
 
         /* Dashboard */
         .dashboard {
@@ -175,7 +182,8 @@
             right: 20px;
             width: 380px;
             max-height: calc(100vh - 100px);
-            display: none; /* Controlled by .show class */
+            display: none;
+            /* Controlled by .show class */
             flex-direction: column;
             padding: 0;
             overflow: hidden;
@@ -183,9 +191,11 @@
             gap: 0;
         }
 
-        .dashboard.show { display: flex; }
+        .dashboard.show {
+            display: flex;
+        }
 
-        .dashboard.minimized > *:not(.dashboard-header) {
+        .dashboard.minimized>*:not(.dashboard-header) {
             display: none;
         }
 
@@ -237,9 +247,12 @@
             width: calc(100% + 40px);
             margin: 0 -20px 15px -20px !important;
             height: auto;
-            aspect-ratio: 16 / 9;
+            /*             aspect-ratio: 16 / 9;
             max-height: 250px;
-            object-fit: cover;
+            object-fit: cover;    */
+            max-height: 280px;
+            object-fit: contain;
+            background: rgba(0, 0, 0, 0.5);
             border-radius: 0 0 10px 10px;
             border-left: none;
             border-right: none;
@@ -285,6 +298,7 @@
             box-shadow: 0 0 30px rgba(0, 243, 255, 0.3);
             transform: scale(0.95);
             transition: transform 0.3s ease;
+            touch-action: none; /* Crucial for native pinch prevention */
         }
 
         .image-modal.show img {
@@ -349,7 +363,7 @@
         .dashboard:not(.minimized) #target-name {
             display: none;
         }
-        
+
         .dashboard.minimized .header-title-generic {
             display: none;
         }
@@ -359,8 +373,14 @@
                 padding: 10px;
                 gap: 5px;
             }
-            h1 { font-size: 1.1rem; }
-            .sector-badge { font-size: 0.7rem; }
+
+            h1 {
+                font-size: 1.1rem;
+            }
+
+            .sector-badge {
+                font-size: 0.7rem;
+            }
 
             .dashboard {
                 width: auto;
@@ -386,6 +406,7 @@
                 width: calc(100% + 30px);
                 max-height: 35vh;
                 margin: 0 -15px 15px -15px !important;
+                object-fit: contain;
             }
 
             .log-navigation-bar {
@@ -441,11 +462,12 @@
                 <div class="header-title-generic">Telemetry Link</div>
                 <div class="minimize-btn" onclick="toggleDashboard()" id="dash-toggle">−</div>
             </div>
-            
+
             <div id="dashboard-scroll-container">
                 <img id="dashboard-img" class="alien-image" src="" alt="Daily View" onclick="openImageModal(this.src)">
                 <div id="dashboard-content">
-                    <h2 id="target-name-content" style="margin: 0 0 10px 0; font-size: 1.6rem; color: #fff;">Select Destination</h2>
+                    <h2 id="target-name-content" style="margin: 0 0 10px 0; font-size: 1.6rem; color: #fff;">Select
+                        Destination</h2>
                     <div class="data-point" style="margin-top: 5px;">
                         <h3>Captain's Log</h3>
                         <p id="target-log" style="font-size: 0.9rem; margin-top: 5px;">Establishing Uplink...</p>
@@ -466,8 +488,8 @@
     </div>
 
     <!-- Image Modal -->
-    <div id="image-modal" class="image-modal" onclick="closeImageModal()">
-        <div class="image-modal-close">×</div>
+    <div id="image-modal" class="image-modal" onclick="if(event.target === this) closeImageModal()">
+        <div class="image-modal-close" onclick="closeImageModal()">×</div>
         <img id="modal-img" src="" alt="Full Size View">
     </div>
 
@@ -479,10 +501,83 @@
             btn.textContent = isMinimized ? '+' : '−';
         }
 
+        let imgScale = 1;
+        let imgPointX = 0;
+        let imgPointY = 0;
+        let imgPanning = false;
+        let imgStart = { x: 0, y: 0 };
+        let initialPinchDist = null;
+        let lastScale = 1;
+
+        const modalImg = document.getElementById('modal-img');
+
+        function updateModalTransform() {
+            modalImg.style.transform = `translate(${imgPointX}px, ${imgPointY}px) scale(${imgScale})`;
+        }
+
+        modalImg.addEventListener('touchstart', (e) => {
+            modalImg.style.transition = 'none'; // Disable smooth animation while actively dragging fingers
+            if (e.touches.length === 2) {
+                imgPanning = false;
+                initialPinchDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                lastScale = imgScale;
+            } else if (e.touches.length === 1) {
+                imgPanning = true;
+                imgStart = { x: e.touches[0].clientX - imgPointX, y: e.touches[0].clientY - imgPointY };
+            }
+        });
+
+        modalImg.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Stop normal webpage scroll
+            if (e.touches.length === 2 && initialPinchDist) {
+                const dist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                const zoom = dist / initialPinchDist;
+                imgScale = Math.min(Math.max(1, lastScale * zoom), 5); // Limit zoom from 1x to 5x
+                
+                // Keep image centered if fully zoomed out
+                if (imgScale <= 1) {
+                    imgPointX = 0;
+                    imgPointY = 0;
+                }
+                updateModalTransform();
+            } else if (e.touches.length === 1 && imgPanning && imgScale > 1) {
+                // Only allow finger panning if the photo is actually zoomed in
+                imgPointX = e.touches[0].clientX - imgStart.x;
+                imgPointY = e.touches[0].clientY - imgStart.y;
+                updateModalTransform();
+            }
+        });
+
+        modalImg.addEventListener('touchend', (e) => {
+            modalImg.style.transition = 'transform 0.3s ease'; // Restore smooth animation when finger releases
+            if (e.touches.length < 2) initialPinchDist = null;
+            if (e.touches.length === 0) imgPanning = false;
+            
+            // Snap back beautifully if user shrinks it too small
+            if (imgScale < 1) {
+                imgScale = 1;
+                imgPointX = 0;
+                imgPointY = 0;
+                updateModalTransform();
+            }
+        });
+
         function openImageModal(src) {
             if (!src) return;
             const modal = document.getElementById('image-modal');
-            const modalImg = document.getElementById('modal-img');
+            
+            // Reset interactions
+            imgScale = 1;
+            imgPointX = 0;
+            imgPointY = 0;
+            modalImg.style.transform = `scale(1)`;
+            
             modalImg.src = src;
             modal.classList.add('show');
         }
@@ -491,8 +586,9 @@
             const modal = document.getElementById('image-modal');
             modal.classList.remove('show');
             setTimeout(() => {
-                document.getElementById('modal-img').src = "";
-            }, 300); // Clear after animation
+                modalImg.src = "";
+                modalImg.style.transform = `scale(0.95)`;
+            }, 300); // Clear after fade-out animation
         }
 
         let journeyData = [];
@@ -650,17 +746,17 @@
                     moons.forEach(m => {
                         // Check if the user visited this specific moon in their journey log
                         const moonVisit = journeyData.find(j => j.TargetID === m.id);
-                        
+
                         // Only build the moon if it was visited, saving rendering power
                         if (moonVisit) {
                             const mMesh = new THREE.Mesh(new THREE.SphereGeometry(m.radius, 16, 16), new THREE.MeshStandardMaterial({ color: m.color, roughness: 0.8 }));
                             mMesh.position.set(m.distance, 0, 0);
                             mesh.add(mMesh);
-                            
+
                             mMesh.userData = moonVisit;
                             nodeMeshes[m.id] = mMesh;
                             clickableObjects.push(mMesh);
-                            
+
                             // It gets its own label too!
                             const mLabelDiv = document.createElement('div');
                             mLabelDiv.className = 'planet-label';
@@ -696,7 +792,7 @@
                     const labelDiv = document.createElement('div');
                     labelDiv.className = 'planet-label';
                     labelDiv.textContent = body.englishName;
-                    
+
                     const handleLabelTap = (e) => {
                         e.preventDefault();
                         handleDestinationClick(mesh.userData);
@@ -754,7 +850,7 @@
 
             scene.add(solarAnchor);
             nodeMeshes["solar_origin"] = solarAnchor;
-            
+
             // Add invisible hitbox to make it easier to click
             const anchorHitboxGeo = new THREE.SphereGeometry(3, 16, 16); // 1.5x larger than the visual sphere (previously 3x)
             const anchorHitboxMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -769,7 +865,7 @@
             const solarLabelDiv = document.createElement('div');
             solarLabelDiv.className = 'planet-label';
             solarLabelDiv.textContent = "Local Solar System";
-            
+
             const handleSolarTap = (e) => {
                 e.preventDefault();
                 handleDestinationClick(solarAnchor.userData);
@@ -810,7 +906,7 @@
                 const labelDiv = document.createElement('div');
                 labelDiv.className = 'planet-label';
                 labelDiv.textContent = node.DisplayName;
-                
+
                 const handleDeepTap = (e) => {
                     e.preventDefault();
                     handleDestinationClick(nebula.userData);
@@ -902,7 +998,7 @@
         function flyToTarget(mesh, data, instant = false) {
             const pos = mesh.position;
             targetFocus.copy(pos);
-            
+
             // Adjust camera base distance dynamically based on target radius
             let baseDistance = 20;
             if (mesh.geometry && mesh.geometry.parameters && mesh.geometry.parameters.radius) {
@@ -910,13 +1006,13 @@
                 // If it's a massive object like the Sun, back the camera way off.
                 baseDistance = Math.max(20, r * 3.5);
             }
-            
+
             targetCameraPos.set(pos.x + baseDistance * 0.75, pos.y + baseDistance * 0.5, pos.z + baseDistance);
 
             const dashboard = document.getElementById('dashboard');
             dashboard.classList.add('show');
             dashboard.classList.remove('minimized');
-            
+
             const dashToggle = document.getElementById('dash-toggle');
             if (dashToggle) dashToggle.textContent = '−';
 
@@ -973,7 +1069,15 @@
             const activeChip = document.getElementById(`day-chip-${index}`);
             if (activeChip) {
                 activeChip.classList.add('active');
-                activeChip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+
+                // Manually calculate the scroll position to keep the chip centered.
+                const selectorContainer = document.getElementById('day-selector-list');
+
+                // Because the container is position: relative, activeChip.offsetLeft is already 
+                // the exact distance from the start of the scrollable content. 
+                const scrollTarget = activeChip.offsetLeft - (selectorContainer.clientWidth / 2) + (activeChip.clientWidth / 2);
+
+                selectorContainer.scrollTo({ left: scrollTarget, behavior: 'smooth' });
             }
             handleDestinationClick(journeyData[index]);
         }
@@ -987,7 +1091,7 @@
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
-        
+
         function handleSceneInteract(clientX, clientY) {
             mouse.x = (clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(clientY / window.innerHeight) * 2 + 1;
