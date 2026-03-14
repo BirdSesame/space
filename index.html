@@ -308,7 +308,6 @@
             }
         }
 
-        /* Floating Planet Labels */
         .planet-label {
             position: absolute;
             background: rgba(0, 0, 0, 0.6);
@@ -317,7 +316,8 @@
             padding: 2px 8px;
             border-radius: 4px;
             font-size: 0.75rem;
-            pointer-events: none;
+            pointer-events: auto;
+            cursor: pointer;
             white-space: nowrap;
             transform: translate(-50%, -100%);
             margin-top: -10px;
@@ -521,6 +521,7 @@
                     LogEntry: "Location locked.", Fact: "Awaiting exploration telemetry."
                 };
 
+                // Render Earth's Moon (Hardcoded default)
                 if (body.id === 'terre') {
                     const moon = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.8 }));
                     moon.position.set(2.5, 0, 0);
@@ -528,20 +529,80 @@
                     animatableObjects.push({ obj: moon, type: "orbit", speed: 0.005, orbitRadius: 2.5, angle: 0 });
                 }
 
+                // Render Dynamic Objects/Moons (like Jupiter's moons or the ISS) if they exist in the log data
+                // In the Google Sheet, the user could add 'iss' or 'europa' as TargetIDs.
+                // We're simulating this capability below to show how it's handled.
+                if (body.id === 'jupiter') {
+                    const moons = [
+                        { id: 'io', name: 'Io', color: 0xffffaa, radius: 0.3, distance: 3.5, speed: 0.012 },
+                        { id: 'europa', name: 'Europa', color: 0xffffff, radius: 0.25, distance: 4.8, speed: 0.009 },
+                        { id: 'ganymede', name: 'Ganymede', color: 0xcccccc, radius: 0.4, distance: 6.5, speed: 0.005 }
+                    ];
+
+                    moons.forEach(m => {
+                        // Check if the user visited this specific moon in their journey log
+                        const moonVisit = journeyData.find(j => j.TargetID === m.id);
+                        
+                        // Only build the moon if it was visited, saving rendering power
+                        if (moonVisit) {
+                            const mMesh = new THREE.Mesh(new THREE.SphereGeometry(m.radius, 16, 16), new THREE.MeshStandardMaterial({ color: m.color, roughness: 0.8 }));
+                            mMesh.position.set(m.distance, 0, 0);
+                            mesh.add(mMesh);
+                            
+                            mMesh.userData = moonVisit;
+                            nodeMeshes[m.id] = mMesh;
+                            clickableObjects.push(mMesh);
+                            
+                            // It gets its own label too!
+                            const mLabelDiv = document.createElement('div');
+                            mLabelDiv.className = 'planet-label';
+                            mLabelDiv.textContent = moonVisit.DisplayName || m.name;
+                            const handleMoonTap = (e) => { e.preventDefault(); handleDestinationClick(mMesh.userData); };
+                            mLabelDiv.addEventListener('click', handleMoonTap);
+                            mLabelDiv.addEventListener('touchstart', handleMoonTap, { passive: false });
+                            document.body.appendChild(mLabelDiv);
+                            planetLabels.push({ element: mLabelDiv, mesh: mMesh });
+
+                            animatableObjects.push({ obj: mMesh, type: "orbit", speed: m.speed, orbitRadius: m.distance, angle: Math.random() * Math.PI * 2 });
+                        }
+                    });
+                }
+
                 scene.add(mesh);
                 nodeMeshes[body.id] = mesh;
+
+                // Add an invisible, larger hitbox for the Sun to make it easier to tap
+                if (isSun) {
+                    const hitboxGeo = new THREE.SphereGeometry(uiSize * 1.5, 16, 16);
+                    const hitboxMat = new THREE.MeshBasicMaterial({ visible: false });
+                    const hitbox = new THREE.Mesh(hitboxGeo, hitboxMat);
+                    hitbox.userData = mesh.userData;
+                    mesh.add(hitbox);
+                    clickableObjects.push(hitbox);
+                } else if (isVisited) {
+                    clickableObjects.push(mesh);
+                }
 
                 // Add Labels for kids (only if visited or is the sun)
                 if (isVisited || isSun) {
                     const labelDiv = document.createElement('div');
                     labelDiv.className = 'planet-label';
                     labelDiv.textContent = body.englishName;
+                    
+                    const handleLabelTap = (e) => {
+                        e.preventDefault();
+                        handleDestinationClick(mesh.userData);
+                    };
+                    labelDiv.addEventListener('click', handleLabelTap);
+                    labelDiv.addEventListener('touchstart', handleLabelTap, { passive: false });
+
                     document.body.appendChild(labelDiv);
                     planetLabels.push({ element: labelDiv, mesh: mesh });
                 }
 
-                if (isVisited || isSun) clickableObjects.push(mesh);
-                animatableObjects.push({ obj: mesh, type: "orbit", speed: 0.0002, orbitRadius: uiDistance, angle: visual.angle });
+                if (isVisited || isSun) {
+                    animatableObjects.push({ obj: mesh, type: "orbit", speed: 0.0002, orbitRadius: uiDistance, angle: visual.angle });
+                }
             });
 
             buildAsteroidBelt();
@@ -585,8 +646,32 @@
 
             scene.add(solarAnchor);
             nodeMeshes["solar_origin"] = solarAnchor;
-            clickableObjects.push(solarAnchor);
+            
+            // Add invisible hitbox to make it easier to click
+            const anchorHitboxGeo = new THREE.SphereGeometry(6, 16, 16); // 3x larger than the visual sphere
+            const anchorHitboxMat = new THREE.MeshBasicMaterial({ visible: false });
+            const anchorHitbox = new THREE.Mesh(anchorHitboxGeo, anchorHitboxMat);
+            anchorHitbox.userData = solarAnchor.userData;
+            solarAnchor.add(anchorHitbox);
+
+            clickableObjects.push(anchorHitbox);
             animatableObjects.push({ obj: solarAnchor, type: "rotation", speed: 0.005 });
+
+            // Add Label for Solar System Return Node
+            const solarLabelDiv = document.createElement('div');
+            solarLabelDiv.className = 'planet-label';
+            solarLabelDiv.textContent = "Local Solar System";
+            
+            const handleSolarTap = (e) => {
+                e.preventDefault();
+                handleDestinationClick(solarAnchor.userData);
+            };
+            solarLabelDiv.addEventListener('click', handleSolarTap);
+            solarLabelDiv.addEventListener('touchstart', handleSolarTap, { passive: false });
+
+            document.body.appendChild(solarLabelDiv);
+            planetLabels.push({ element: solarLabelDiv, mesh: solarAnchor });
+
 
             const deepSpaceNodes = journeyData.filter(d => d.SceneType === "deepspace");
 
@@ -617,6 +702,14 @@
                 const labelDiv = document.createElement('div');
                 labelDiv.className = 'planet-label';
                 labelDiv.textContent = node.DisplayName;
+                
+                const handleDeepTap = (e) => {
+                    e.preventDefault();
+                    handleDestinationClick(nebula.userData);
+                };
+                labelDiv.addEventListener('click', handleDeepTap);
+                labelDiv.addEventListener('touchstart', handleDeepTap, { passive: false });
+
                 document.body.appendChild(labelDiv);
                 planetLabels.push({ element: labelDiv, mesh: nebula });
 
@@ -776,11 +869,10 @@
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
-        window.addEventListener('click', (event) => {
-            if (event.target.tagName !== 'CANVAS') return;
-
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        
+        function handleSceneInteract(clientX, clientY) {
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
 
             const intersects = raycaster.intersectObjects(clickableObjects);
@@ -790,6 +882,18 @@
                     targetData = intersects[0].object.parent.userData;
                 }
                 if (targetData.TargetID) handleDestinationClick(targetData);
+            }
+        }
+
+        window.addEventListener('click', (event) => {
+            if (event.target.tagName !== 'CANVAS') return;
+            handleSceneInteract(event.clientX, event.clientY);
+        });
+
+        window.addEventListener('touchstart', (event) => {
+            if (event.target.tagName !== 'CANVAS') return;
+            if (event.touches.length > 0) {
+                handleSceneInteract(event.touches[0].clientX, event.touches[0].clientY);
             }
         });
 
@@ -848,6 +952,17 @@
                 flightPathLine.computeLineDistances();
             }
 
+            if (isAutoNavigating) {
+                controls.target.lerp(targetFocus, 0.04);
+                camera.position.lerp(targetCameraPos, 0.04);
+                if (camera.position.distanceTo(targetCameraPos) < 0.2) isAutoNavigating = false;
+            }
+
+            // Important: Update controls and matrix BEFORE calculating 2D label projections
+            // to stop labels from "falling off" or lagging behind the swipe
+            controls.update();
+            camera.updateMatrixWorld();
+
             // Update 2D Labels
             const vector = new THREE.Vector3();
             planetLabels.forEach(label => {
@@ -868,13 +983,6 @@
                 }
             });
 
-            if (isAutoNavigating) {
-                controls.target.lerp(targetFocus, 0.04);
-                camera.position.lerp(targetCameraPos, 0.04);
-                if (camera.position.distanceTo(targetCameraPos) < 0.2) isAutoNavigating = false;
-            }
-
-            controls.update();
             renderer.render(scene, camera);
         }
 
