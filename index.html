@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galactic Companion Explorer - MVP</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        :root {
+            --primary: #00f3ff;
+            --secondary: #b066ff;
+            --dark-bg: #030308;
+            --glass-bg: rgba(17, 25, 40, 0.75);
+            --glass-border: rgba(255, 255, 255, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: var(--dark-bg);
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        /* UI Overlay */
+        .ui-layer {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            pointer-events: none;
+        }
+
+        header {
+            padding: 15px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            pointer-events: auto;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--primary);
+        }
+
+        .sector-badge {
+            background: rgba(176, 102, 255, 0.1);
+            border: 1px solid rgba(176, 102, 255, 0.4);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .main-layout {
+            display: flex;
+            flex: 1;
+            padding: 20px;
+            gap: 20px;
+            overflow: hidden;
+        }
+
+        .glass-panel {
+            background-color: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 15px;
+            pointer-events: auto;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+
+        .sidebar h2 {
+            margin-top: 0;
+            font-size: 1.2rem;
+            color: var(--primary);
+            border-bottom: 1px solid rgba(0, 243, 255, 0.3);
+            padding-bottom: 10px;
+        }
+
+        /* Log Entry Styling inside Dashboard */
+        .log-navigation-bar {
+            grid-column: 1 / -1; /* Spans across both columns on desktop grid */
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding-top: 15px;
+            border-top: 1px solid var(--glass-border);
+            margin-top: 10px;
+        }
+
+        .day-selector {
+            display: flex;
+            gap: 10px;
+            overflow-x: auto;
+            flex: 1;
+            padding: 5px 0;
+            scrollbar-width: none;
+        }
+
+        .day-selector::-webkit-scrollbar { display: none; }
+
+        .day-chip {
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s;
+            color: #aaa;
+        }
+
+        .day-chip.active {
+            background: var(--secondary);
+            border-color: var(--secondary);
+            color: white;
+            box-shadow: 0 0 10px rgba(176, 102, 255, 0.4);
+        }
+
+        .nav-btn {
+            background: rgba(0, 243, 255, 0.1);
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+        }
+
+        .nav-btn:hover { background: var(--primary); color: var(--dark-bg); }
+
+        /* Dashboard */
+        .dashboard {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 380px;
+            max-height: calc(100vh - 100px);
+            display: none; /* Controlled by .show class */
+            flex-direction: column;
+            padding: 0;
+            overflow: hidden;
+            z-index: 100;
+            gap: 0;
+        }
+
+        .dashboard.show { display: flex; }
+
+        .dashboard.minimized > *:not(.dashboard-header) {
+            display: none;
+        }
+
+        .dashboard.minimized {
+            max-height: 60px;
+        }
+
+        .dashboard-header {
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            z-index: 2;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .minimize-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            color: white;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+
+        .minimize-btn:hover {
+            background: var(--primary);
+            color: var(--dark-bg);
+        }
+
+        #dashboard-scroll-container {
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex: 1;
+            padding: 0 20px 20px 20px;
+            gap: 15px;
+        }
+
+        .alien-image {
+            width: calc(100% + 40px);
+            margin: 0 -20px 15px -20px !important;
+            height: auto;
+            aspect-ratio: 16 / 9;
+            max-height: 250px;
+            object-fit: cover;
+            border-radius: 0 0 10px 10px;
+            border-left: none;
+            border-right: none;
+            flex-shrink: 0;
+            order: -1;
+        }
+
+        .data-point h3 {
+            font-size: 0.85rem;
+            color: var(--primary);
+            text-transform: uppercase;
+            margin: 0 0 8px 0;
+        }
+
+        .data-point p {
+            margin: 0 0 15px 0;
+            font-size: 1rem;
+            line-height: 1.5;
+            color: #e0e0e0;
+        }
+
+        #target-name {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 0;
+            text-align: left;
+        }
+
+        @media (max-width: 768px) {
+            header {
+                padding: 10px;
+                gap: 5px;
+            }
+            h1 { font-size: 1.1rem; }
+            .sector-badge { font-size: 0.7rem; }
+
+            .dashboard {
+                width: auto;
+                left: 15px;
+                right: 15px;
+                bottom: 15px;
+                max-height: 80vh;
+            }
+
+            .dashboard.minimized {
+                max-height: 50px;
+            }
+
+            .dashboard-header {
+                padding: 12px 15px;
+            }
+
+            #dashboard-scroll-container {
+                padding: 0 15px 15px 15px;
+            }
+
+            .alien-image {
+                width: calc(100% + 30px);
+                max-height: 35vh;
+                margin: 0 -15px 15px -15px !important;
+            }
+
+            .log-navigation-bar {
+                padding: 12px 15px;
+            }
+        }
+
+        /* Floating Planet Labels */
+        .planet-label {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--primary);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            pointer-events: none;
+            white-space: nowrap;
+            transform: translate(-50%, -100%);
+            margin-top: -10px;
+            opacity: 1;
+            transition: opacity 0.3s;
+            z-index: 5;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 243, 255, 0.3);
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+
+    <div class="ui-layer">
+        <header>
+            <h1>Star Log Explorer</h1>
+            <div class="sector-badge" id="sector-display">Sector: Local Solar System</div>
+        </header>
+
+        <div class="glass-panel dashboard" id="dashboard">
+            <div class="dashboard-header">
+                <div id="target-name">Select Destination</div>
+                <div class="minimize-btn" onclick="toggleDashboard()" id="dash-toggle">−</div>
+            </div>
+            
+            <div id="dashboard-scroll-container">
+                <img id="dashboard-img" class="alien-image" src="" alt="Daily View">
+                <div id="dashboard-content">
+                    <div class="data-point" style="margin-top: 10px;">
+                        <h3>Captain's Log</h3>
+                        <p id="target-log" style="font-size: 0.9rem; margin-top: 5px;">Establishing Uplink...</p>
+                    </div>
+                    <div class="data-point">
+                        <h3>Science Database</h3>
+                        <p id="target-fact" style="font-size: 0.8rem; color: var(--primary); opacity: 0.8;"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="log-navigation-bar">
+                <button class="nav-btn" onclick="navigateLog(-1)">◀ Prev</button>
+                <div class="day-selector" id="day-selector-list"></div>
+                <button class="nav-btn" onclick="navigateLog(1)">Next ▶</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. GLOBAL DATA PAYLOADS ---
+        function toggleDashboard() {
+            const dash = document.getElementById('dashboard');
+            const btn = document.getElementById('dash-toggle');
+            const isMinimized = dash.classList.toggle('minimized');
+            btn.textContent = isMinimized ? '+' : '−';
+        }
+
+        let journeyData = [];
+        let solarSystemData = [];
+
+        // --- SOLAR SYSTEM API MAPPING ---
+        const textureBaseUrl = "https://raw.githubusercontent.com/harinii-a/3Dsolar-system-Threejs/main/imgs/";
+        const visualMap = {
+            "soleil": { color: 0xffcc00, angle: 0, tex: "suntexture.jpg" },
+            "mercure": { color: 0xaaaaaa, angle: 1.2, tex: "mercury.jpg" },
+            "venus": { color: 0xffaa00, angle: 3.4, tex: "venus.jpg" },
+            "terre": { color: 0x00f3ff, angle: 0.5, tex: "earth.jpg" },
+            "mars": { color: 0xff4400, angle: 4.1, tex: "mars.jpg" },
+            "jupiter": { color: 0xd8ca9d, angle: 2.2, tex: "jupiter.jpg" },
+            "saturne": { color: 0xf4d03f, angle: 5.8, tex: "saturn.jpg" },
+            "uranus": { color: 0x4b70dd, angle: 1.9, tex: "uranus.jpg" },
+            "neptune": { color: 0x4b70dd, angle: 3.1, tex: "neptune.jpg" }
+        };
+        const textureLoader = new THREE.TextureLoader();
+
+        // MATH BUG FIX: Better planetary scaling to avoid overlapping distances and colliding sizes.
+        function scaleDistance(km) { return (!km || km <= 0) ? 0 : Math.pow(km, 0.3) * 0.2; }
+        function scaleSize(radiusKm, isSun) { return isSun ? 15 : Math.max(Math.pow((radiusKm || 1000) / 1000, 0.5) * 0.8, 0.6); }
+
+        // --- 2. THREE.JS GLOBAL SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 5000);
+        scene.add(camera);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxDistance = 600;
+
+        let currentMode = "none";
+        let animatableObjects = [];
+        let clickableObjects = [];
+        let nodeMeshes = {};
+        let planetLabels = []; // Labels to update in 2D
+
+        let targetFocus = new THREE.Vector3(0, 0, 0);
+        let targetCameraPos = new THREE.Vector3(0, 30, 40);
+        let isAutoNavigating = false;
+
+        let flightPathLine;
+        let visitedMeshes = [];
+        const pathMaterial = new THREE.LineDashedMaterial({ color: 0x00f3ff, linewidth: 2, scale: 1, dashSize: 0.8, gapSize: 0.4, transparent: true, opacity: 0.6 });
+
+        // --- 3. SCENE BUILDERS ---
+        function clearScene() {
+            const children = [...scene.children];
+            children.forEach(child => {
+                if (child.type !== "PerspectiveCamera") {
+                    scene.remove(child);
+                }
+            });
+
+            // Clear 2D labels
+            planetLabels.forEach(l => l.element.remove());
+            planetLabels = [];
+
+            animatableObjects = animatableObjects.filter(anim => anim.type === "warp");
+            clickableObjects = []; nodeMeshes = {}; visitedMeshes = [];
+            addBackgroundStars();
+        }
+
+        function addBackgroundStars() {
+            const starGeo = new THREE.BufferGeometry();
+            const starPos = new Float32Array(4000 * 3);
+            for (let i = 0; i < 12000; i++) { starPos[i] = (Math.random() - 0.5) * 800; }
+            starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+            const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.2, transparent: true, opacity: 0.5 }));
+            scene.add(stars);
+            animatableObjects.push({ obj: stars, type: "rotation", speed: 0.0002 });
+        }
+
+        function buildSolarSystem() {
+            clearScene();
+            currentMode = "solar";
+            document.getElementById('sector-display').innerText = "Sector: Local Solar System";
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.PointLight(0xffffff, 2.5, 800);
+            scene.add(sunLight);
+
+            solarSystemData.forEach(body => {
+                const visual = visualMap[body.id];
+                if (!visual) return;
+
+                const isSun = body.id === 'soleil';
+                // Bypass distance calculation entirely if it is the sun
+                const uiDistance = isSun ? 0 : scaleDistance(body.semimajorAxis);
+                const uiSize = scaleSize(body.meanRadius, isSun);
+
+                const visitRecord = journeyData.find(j => j.TargetID === body.id);
+                const isVisited = !!visitRecord;
+
+                if (!isSun) {
+                    const ringGeo = new THREE.RingGeometry(uiDistance - 0.1, uiDistance + 0.1, 64);
+                    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, opacity: 0.05 });
+                    const ring = new THREE.Mesh(ringGeo, ringMat);
+                    ring.rotation.x = Math.PI / 2;
+                    scene.add(ring);
+                }
+
+                const geo = new THREE.SphereGeometry(uiSize, 32, 32);
+
+                let mat;
+                if (isSun) {
+                    mat = new THREE.MeshBasicMaterial({
+                        map: textureLoader.load(textureBaseUrl + visual.tex),
+                        transparent: true, opacity: 1.0, color: 0xffffff
+                    });
+                } else {
+                    mat = new THREE.MeshStandardMaterial({
+                        map: textureLoader.load(textureBaseUrl + visual.tex),
+                        transparent: true, opacity: isVisited ? 1.0 : 0.2,
+                        roughness: 0.6, color: 0xffffff
+                    });
+                }
+                const mesh = new THREE.Mesh(geo, mat);
+
+                const pos = new THREE.Vector3(Math.cos(visual.angle) * uiDistance, 0, Math.sin(visual.angle) * uiDistance);
+                mesh.position.copy(pos);
+
+                mesh.userData = visitRecord || {
+                    TargetID: body.id, DisplayName: body.englishName,
+                    LogEntry: "Location locked.", Fact: "Awaiting exploration telemetry."
+                };
+
+                if (body.id === 'terre') {
+                    const moon = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.8 }));
+                    moon.position.set(2.5, 0, 0);
+                    mesh.add(moon);
+                    animatableObjects.push({ obj: moon, type: "orbit", speed: 0.005, orbitRadius: 2.5, angle: 0 });
+                }
+
+                scene.add(mesh);
+                nodeMeshes[body.id] = mesh;
+
+                // Add Labels for kids (only if visited or is the sun)
+                if (isVisited || isSun) {
+                    const labelDiv = document.createElement('div');
+                    labelDiv.className = 'planet-label';
+                    labelDiv.textContent = body.englishName;
+                    document.body.appendChild(labelDiv);
+                    planetLabels.push({ element: labelDiv, mesh: mesh });
+                }
+
+                if (isVisited || isSun) clickableObjects.push(mesh);
+                animatableObjects.push({ obj: mesh, type: "orbit", speed: 0.0002, orbitRadius: uiDistance, angle: visual.angle });
+            });
+
+            buildAsteroidBelt();
+            buildFlightPath("solar");
+        }
+
+        function buildAsteroidBelt() {
+            const asteroidCount = 800;
+            const instancedMesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.3, 0), new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 }), asteroidCount);
+            const dummy = new THREE.Object3D();
+
+            for (let i = 0; i < asteroidCount; i++) {
+                // The Asteroid Belt should be mathematically positioned between Mars (~66) and Jupiter (~95.6)
+                const radius = 72 + Math.random() * 12;
+                const angle = Math.random() * Math.PI * 2;
+                dummy.position.set(Math.cos(angle) * radius, (Math.random() - 0.5) * 3, Math.sin(angle) * radius);
+                dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+                dummy.scale.setScalar(0.5 + Math.random());
+                dummy.updateMatrix();
+                instancedMesh.setMatrixAt(i, dummy.matrix);
+            }
+            scene.add(instancedMesh);
+            animatableObjects.push({ obj: instancedMesh, type: "rotation", speed: 0.0002 });
+        }
+
+        function buildDeepSpace() {
+            clearScene();
+            currentMode = "deepspace";
+            document.getElementById('sector-display').innerText = "Sector: Deep Space";
+
+            const solarAnchorGeo = new THREE.SphereGeometry(2, 16, 16);
+            const solarAnchorMat = new THREE.MeshBasicMaterial({ color: 0x00f3ff });
+            const solarAnchor = new THREE.Mesh(solarAnchorGeo, solarAnchorMat);
+
+            solarAnchor.position.set(0, 0, 0);
+            solarAnchor.userData = {
+                TargetID: "solar_origin", SceneType: "solar", DisplayName: "Local Solar System",
+                LogEntry: "Looking back, our whole solar system is just a tiny speck of light!",
+                Fact: "The Solar System is located in the Orion Arm of the Milky Way galaxy."
+            };
+
+            scene.add(solarAnchor);
+            nodeMeshes["solar_origin"] = solarAnchor;
+            clickableObjects.push(solarAnchor);
+            animatableObjects.push({ obj: solarAnchor, type: "rotation", speed: 0.005 });
+
+            const deepSpaceNodes = journeyData.filter(d => d.SceneType === "deepspace");
+
+            deepSpaceNodes.forEach(node => {
+                const ra = Number(node.RA) || 0;
+                const dec = Number(node.Dec) || 0;
+                const distLY = Number(node.Distance_LY) || 10;
+
+                const raRad = (ra * 15) * (Math.PI / 180);
+                const decRad = dec * (Math.PI / 180);
+                const r = Math.log10(distLY + 1) * 20 + 20;
+
+                const pos = new THREE.Vector3(
+                    r * Math.cos(decRad) * Math.cos(raRad),
+                    r * Math.sin(decRad),
+                    r * Math.cos(decRad) * Math.sin(raRad)
+                );
+
+                const nebula = new THREE.Mesh(new THREE.SphereGeometry(3, 16, 16), new THREE.MeshBasicMaterial({ color: 0xb066ff, wireframe: true }));
+                nebula.position.copy(pos);
+                nebula.userData = node;
+
+                scene.add(nebula);
+                const nodeId = node.TargetID || node.DisplayName;
+                nodeMeshes[nodeId] = nebula;
+
+                // Add Labels for Deep Space
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'planet-label';
+                labelDiv.textContent = node.DisplayName;
+                document.body.appendChild(labelDiv);
+                planetLabels.push({ element: labelDiv, mesh: nebula });
+
+                clickableObjects.push(nebula);
+                animatableObjects.push({ obj: nebula, type: "rotation", speed: 0.005 });
+            });
+
+            buildFlightPath("deepspace");
+        }
+
+        function buildFlightPath(sceneType) {
+            if (sceneType === "solar") {
+                const validJourney = journeyData.filter(d => d.SceneType === "solar");
+                visitedMeshes = validJourney.map(entry => nodeMeshes[entry.TargetID || entry.DisplayName]).filter(mesh => mesh !== undefined);
+            } else if (sceneType === "deepspace") {
+                const validJourney = journeyData.filter(d => d.SceneType === "deepspace");
+                visitedMeshes = validJourney.map(entry => nodeMeshes[entry.TargetID || entry.DisplayName]).filter(mesh => mesh !== undefined);
+                if (nodeMeshes["solar_origin"]) visitedMeshes.unshift(nodeMeshes["solar_origin"]);
+            }
+
+            if (visitedMeshes.length > 1) {
+                const pathPoints = visitedMeshes.map(mesh => mesh.position);
+                flightPathLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pathPoints), pathMaterial);
+                flightPathLine.computeLineDistances();
+                scene.add(flightPathLine);
+            } else {
+                flightPathLine = null;
+            }
+        }
+
+        // --- 4. NAVIGATION & STATE MACHINE ---
+        function handleDestinationClick(data) {
+            if (!data) return;
+            const targetId = data.TargetID || data.DisplayName;
+            if (!targetId) return;
+
+            if (data.SceneType !== currentMode) {
+                triggerHyperjump(data.SceneType, data);
+            } else {
+                const targetMesh = nodeMeshes[targetId];
+                if (targetMesh) flyToTarget(targetMesh, data);
+            }
+        }
+
+        function triggerHyperjump(targetSceneType, targetData) {
+            isAutoNavigating = false;
+
+            const lineGeo = new THREE.BufferGeometry();
+            const numLines = 1000;
+            const points = new Float32Array(numLines * 6);
+            for (let i = 0; i < numLines; i++) {
+                const r = 3 + Math.random() * 80;
+                const theta = Math.random() * Math.PI * 2;
+                const x = r * Math.cos(theta);
+                const y = r * Math.sin(theta);
+                const z = - (Math.random() * 150);
+                points[i * 6] = x; points[i * 6 + 1] = y; points[i * 6 + 2] = z;
+                points[i * 6 + 3] = x; points[i * 6 + 4] = y; points[i * 6 + 5] = z;
+            }
+            lineGeo.setAttribute('position', new THREE.BufferAttribute(points, 3));
+            lineGeo.setAttribute('basePosition', new THREE.BufferAttribute(new Float32Array(points), 3));
+
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x00f3ff, transparent: true, opacity: 0.8 });
+            const warpLines = new THREE.LineSegments(lineGeo, lineMat);
+            camera.add(warpLines);
+
+            const warpDuration = 1800;
+            animatableObjects.push({ obj: warpLines, type: 'warp', startTime: Date.now(), duration: warpDuration });
+
+            setTimeout(() => {
+                if (targetSceneType === "solar") buildSolarSystem();
+                if (targetSceneType === "deepspace") buildDeepSpace();
+
+                let targetMeshId = targetData.TargetID || targetData.DisplayName;
+                if (targetMeshId === "solar_origin") targetMeshId = "terre";
+
+                const targetMesh = nodeMeshes[targetMeshId];
+                if (targetMesh) flyToTarget(targetMesh, targetData, true);
+            }, warpDuration / 2);
+        }
+
+        function flyToTarget(mesh, data, instant = false) {
+            const pos = mesh.position;
+            targetFocus.copy(pos);
+            targetCameraPos.set(pos.x + 15, pos.y + 10, pos.z + 20);
+
+            const dashboard = document.getElementById('dashboard');
+            dashboard.classList.add('show');
+            dashboard.classList.remove('minimized');
+            
+            const dashToggle = document.getElementById('dash-toggle');
+            if (dashToggle) dashToggle.textContent = '−';
+
+            document.getElementById('target-name').innerText = data.DisplayName || "Unknown Sector";
+            document.getElementById('target-log').innerText = data.LogEntry || "No data.";
+            document.getElementById('target-fact').innerText = data.Fact || "";
+
+            const imgElement = document.getElementById('dashboard-img');
+            if (data.ImageURL) {
+                // Parse Google Drive generic/export URLs into robust image viewer URLs
+                const idMatch = data.ImageURL.match(/id=([^&]+)/) || data.ImageURL.match(/\/d\/([^/]+)/);
+                if (idMatch && idMatch[1]) {
+                    imgElement.src = `https://lh3.googleusercontent.com/d/${idMatch[1]}=w1000`;
+                } else {
+                    imgElement.src = data.ImageURL;
+                }
+                imgElement.style.display = 'block';
+            } else {
+                imgElement.src = "";
+                imgElement.style.display = 'none';
+            }
+
+            isAutoNavigating = true;
+
+            if (instant) {
+                camera.position.copy(targetCameraPos);
+                controls.target.copy(targetFocus);
+            }
+        }
+
+        // --- 5. INITIALIZE UI ---
+        function initializeTravelLog() {
+            const selectorList = document.getElementById('day-selector-list');
+            selectorList.innerHTML = '';
+
+            journeyData.forEach((entry, index) => {
+                const chip = document.createElement('div');
+                chip.className = 'day-chip';
+                chip.id = `day-chip-${index}`;
+                // Now including the visit destination in the chip
+                chip.textContent = `${index + 1}: ${entry.DisplayName}`;
+                chip.addEventListener('click', () => selectLogEntry(index));
+                selectorList.appendChild(chip);
+            });
+        }
+
+        let currentLogIndex = -1;
+        function selectLogEntry(index) {
+            if (index < 0 || index >= journeyData.length) return;
+            currentLogIndex = index;
+
+            document.querySelectorAll('.day-chip').forEach(el => el.classList.remove('active'));
+            const activeChip = document.getElementById(`day-chip-${index}`);
+            if (activeChip) {
+                activeChip.classList.add('active');
+                activeChip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+            }
+            handleDestinationClick(journeyData[index]);
+        }
+
+        function navigateLog(dir) {
+            let next = currentLogIndex + dir;
+            if (next < 0) next = journeyData.length - 1;
+            if (next >= journeyData.length) next = 0;
+            selectLogEntry(next);
+        }
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        window.addEventListener('click', (event) => {
+            if (event.target.tagName !== 'CANVAS') return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects(clickableObjects);
+            if (intersects.length > 0) {
+                let targetData = intersects[0].object.userData;
+                if (!targetData.TargetID && intersects[0].object.parent && intersects[0].object.parent.userData.TargetID) {
+                    targetData = intersects[0].object.parent.userData;
+                }
+                if (targetData.TargetID) handleDestinationClick(targetData);
+            }
+        });
+
+        controls.addEventListener('start', () => isAutoNavigating = false);
+
+        // --- 6. ANIMATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            animatableObjects.forEach(anim => {
+                if (anim.type === "rotation") {
+                    anim.obj.rotation.y += anim.speed;
+                } else if (anim.type === "orbit") {
+                    anim.angle += anim.speed;
+                    anim.obj.position.x = Math.cos(anim.angle) * anim.orbitRadius;
+                    anim.obj.position.z = Math.sin(anim.angle) * anim.orbitRadius;
+                } else if (anim.type === "warp") {
+                    const elapsed = Date.now() - anim.startTime;
+                    const progress = elapsed / anim.duration;
+
+                    if (progress > 1) {
+                        camera.remove(anim.obj);
+                        anim.obj.geometry.dispose();
+                        anim.obj.material.dispose();
+                        anim.markForDeletion = true;
+                        camera.fov = 45;
+                        camera.updateProjectionMatrix();
+                        return;
+                    }
+
+                    const positions = anim.obj.geometry.attributes.position.array;
+                    const basePos = anim.obj.geometry.attributes.basePosition.array;
+
+                    let speedCurve = Math.sin(progress * Math.PI);
+                    let travelDist = elapsed * 0.4;
+
+                    for (let i = 0; i < positions.length / 6; i++) {
+                        let z = basePos[i * 6 + 2] + travelDist;
+                        z = ((z + 150) % 180) - 150;
+
+                        positions[i * 6 + 2] = z;
+                        positions[i * 6 + 5] = z + (speedCurve * 80);
+                    }
+                    anim.obj.geometry.attributes.position.needsUpdate = true;
+
+                    camera.fov = 45 + (speedCurve * 50);
+                    camera.updateProjectionMatrix();
+                }
+            });
+
+            animatableObjects = animatableObjects.filter(a => !a.markForDeletion);
+
+            if (flightPathLine && visitedMeshes.length > 1 && currentMode === "solar") {
+                const updatedPoints = visitedMeshes.map(mesh => mesh.position);
+                flightPathLine.geometry.setFromPoints(updatedPoints);
+                flightPathLine.computeLineDistances();
+            }
+
+            // Update 2D Labels
+            const vector = new THREE.Vector3();
+            planetLabels.forEach(label => {
+                vector.setFromMatrixPosition(label.mesh.matrixWorld);
+                vector.project(camera);
+
+                const x = (vector.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (vector.y * -0.5 + 0.5) * window.innerHeight;
+
+                label.element.style.left = `${x}px`;
+                label.element.style.top = `${y}px`;
+
+                // Hide if behind camera
+                if (vector.z > 1) {
+                    label.element.style.opacity = 0;
+                } else {
+                    label.element.style.opacity = 1;
+                }
+            });
+
+            if (isAutoNavigating) {
+                controls.target.lerp(targetFocus, 0.04);
+                camera.position.lerp(targetCameraPos, 0.04);
+                if (camera.position.distanceTo(targetCameraPos) < 0.2) isAutoNavigating = false;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- 7. APP BOOTSTRAPPER ---
+        async function startGalacticExplorer() {
+            const API_URL = "https://script.google.com/macros/s/AKfycbyvdQAxbEycR2eh7H1M3grdkpYe4d_GsUOfwALKi1UKW9vMpI6G-46xt1vMWscem1U2/exec";
+
+            document.getElementById('dashboard').classList.add('show');
+            document.getElementById('target-name').innerText = "Establishing Uplink...";
+            document.getElementById('target-log').innerText = "Downloading telemetry. Please stand by.";
+
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error("Google Sheet network response was not ok.");
+                journeyData = await response.json();
+            } catch (error) {
+                document.getElementById('target-name').innerText = "Connection Failed";
+                document.getElementById('target-log').innerText = "Failed to fetch from Google Apps Script.";
+                return;
+            }
+
+            try {
+                const apiRes = await fetch('https://api.le-systeme-solaire.net/rest/bodies');
+                if (!apiRes.ok) throw new Error("French API network response was not ok.");
+                const apiJson = await apiRes.json();
+                solarSystemData = apiJson.bodies;
+            } catch (error) {
+                console.warn("Using fallback planetary data: " + error.message);
+                solarSystemData = [
+                    { id: "soleil", englishName: "Sun", semimajorAxis: 0, meanRadius: 696340 },
+                    { id: "mercure", englishName: "Mercury", semimajorAxis: 57909050, meanRadius: 2439.7 },
+                    { id: "venus", englishName: "Venus", semimajorAxis: 108208000, meanRadius: 6051.8 },
+                    { id: "terre", englishName: "Earth", semimajorAxis: 149598023, meanRadius: 6371 },
+                    { id: "mars", englishName: "Mars", semimajorAxis: 227939200, meanRadius: 3389.5 },
+                    { id: "jupiter", englishName: "Jupiter", semimajorAxis: 778570000, meanRadius: 69911 },
+                    { id: "saturne", englishName: "Saturn", semimajorAxis: 1433530000, meanRadius: 58232 },
+                    { id: "uranus", englishName: "Uranus", semimajorAxis: 2872400000, meanRadius: 25362 },
+                    { id: "neptune", englishName: "Neptune", semimajorAxis: 4495100000, meanRadius: 24622 }
+                ];
+            }
+
+            if (!journeyData || journeyData.length === 0) {
+                document.getElementById('target-log').innerText = "No flight logs found for today's date.";
+                return;
+            }
+
+            try {
+                initializeTravelLog();
+                buildSolarSystem();
+
+                const latestEntryIndex = journeyData.length - 1;
+                selectLogEntry(latestEntryIndex);
+
+                animate();
+            } catch (error) {
+                document.getElementById('target-name').innerText = "System Error";
+                document.getElementById('target-log').innerHTML = `The network connected, but the 3D engine crashed.<br><br><b>Developer Note:</b> Check the browser console (F12).`;
+            }
+        }
+
+        startGalacticExplorer();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+
+</html>
