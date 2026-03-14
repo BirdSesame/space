@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Galactic Companion Explorer - MVP</title>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&display=swap"
         rel="stylesheet">
@@ -573,7 +573,7 @@
 
                 // Add an invisible, larger hitbox for the Sun to make it easier to tap
                 if (isSun) {
-                    const hitboxGeo = new THREE.SphereGeometry(uiSize * 1.5, 16, 16);
+                    const hitboxGeo = new THREE.SphereGeometry(uiSize * 1.05, 16, 16); // Only slightly larger than the visual sphere
                     const hitboxMat = new THREE.MeshBasicMaterial({ visible: false });
                     const hitbox = new THREE.Mesh(hitboxGeo, hitboxMat);
                     hitbox.userData = mesh.userData;
@@ -648,7 +648,7 @@
             nodeMeshes["solar_origin"] = solarAnchor;
             
             // Add invisible hitbox to make it easier to click
-            const anchorHitboxGeo = new THREE.SphereGeometry(6, 16, 16); // 3x larger than the visual sphere
+            const anchorHitboxGeo = new THREE.SphereGeometry(3, 16, 16); // 1.5x larger than the visual sphere (previously 3x)
             const anchorHitboxMat = new THREE.MeshBasicMaterial({ visible: false });
             const anchorHitbox = new THREE.Mesh(anchorHitboxGeo, anchorHitboxMat);
             anchorHitbox.userData = solarAnchor.userData;
