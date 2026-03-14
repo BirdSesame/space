@@ -794,7 +794,16 @@
         function flyToTarget(mesh, data, instant = false) {
             const pos = mesh.position;
             targetFocus.copy(pos);
-            targetCameraPos.set(pos.x + 15, pos.y + 10, pos.z + 20);
+            
+            // Adjust camera base distance dynamically based on target radius
+            let baseDistance = 20;
+            if (mesh.geometry && mesh.geometry.parameters && mesh.geometry.parameters.radius) {
+                const r = mesh.geometry.parameters.radius;
+                // If it's a massive object like the Sun, back the camera way off.
+                baseDistance = Math.max(20, r * 3.5);
+            }
+            
+            targetCameraPos.set(pos.x + baseDistance * 0.75, pos.y + baseDistance * 0.5, pos.z + baseDistance);
 
             const dashboard = document.getElementById('dashboard');
             dashboard.classList.add('show');
@@ -885,16 +894,26 @@
             }
         }
 
-        window.addEventListener('click', (event) => {
+        let pointerDownPos = { x: 0, y: 0 };
+        let pointerMoved = false;
+
+        window.addEventListener('pointerdown', (event) => {
             if (event.target.tagName !== 'CANVAS') return;
-            handleSceneInteract(event.clientX, event.clientY);
+            pointerDownPos.x = event.clientX;
+            pointerDownPos.y = event.clientY;
+            pointerMoved = false;
         });
 
-        window.addEventListener('touchstart', (event) => {
-            if (event.target.tagName !== 'CANVAS') return;
-            if (event.touches.length > 0) {
-                handleSceneInteract(event.touches[0].clientX, event.touches[0].clientY);
+        window.addEventListener('pointermove', (event) => {
+            // Track if the pointer actually dragged/pinched across the screen vs just tapping
+            if (Math.hypot(event.clientX - pointerDownPos.x, event.clientY - pointerDownPos.y) > 10) {
+                pointerMoved = true;
             }
+        });
+
+        window.addEventListener('pointerup', (event) => {
+            if (event.target.tagName !== 'CANVAS' || pointerMoved) return;
+            handleSceneInteract(event.clientX, event.clientY);
         });
 
         controls.addEventListener('start', () => isAutoNavigating = false);
