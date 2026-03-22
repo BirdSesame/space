@@ -632,10 +632,15 @@
         let clickableObjects = [];
         let nodeMeshes = {};
         let planetLabels = []; // Labels to update in 2D
+        let rocketShip;
 
         let targetFocus = new THREE.Vector3(0, 0, 0);
         let targetCameraPos = new THREE.Vector3(0, 30, 40);
         let isAutoNavigating = false;
+        
+        // Navigation tracking state
+        let followedTargetMesh = null;
+        let lastTargetPosition = new THREE.Vector3();
 
         let flightPathLine;
         let visitedMeshes = [];
@@ -645,7 +650,8 @@
         function clearScene() {
             const children = [...scene.children];
             children.forEach(child => {
-                if (child.type !== "PerspectiveCamera") {
+                // Don't remove the camera or the rocket ship (which might be in transition)
+                if (child.type !== "PerspectiveCamera" && child !== rocketShip) {
                     scene.remove(child);
                 }
             });
@@ -657,6 +663,70 @@
             animatableObjects = animatableObjects.filter(anim => anim.type === "warp");
             clickableObjects = []; nodeMeshes = {}; visitedMeshes = [];
             addBackgroundStars();
+        }
+
+        function createRocketShip() {
+            const wrapper = new THREE.Group();
+            const group = new THREE.Group();
+            wrapper.add(group);
+            wrapper.userData.innerGroup = group;
+
+            // Body (Cylinder)
+            const bodyGeo = new THREE.CylinderGeometry(0.3, 0.3, 1, 16);
+            const bodyMat = new THREE.MeshStandardMaterial({ 
+                color: 0xdddddd, 
+                metalness: 0.8, 
+                roughness: 0.2,
+                emissive: 0x111111 
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            group.add(body);
+
+            // Nose (Cone)
+            const noseGeo = new THREE.ConeGeometry(0.3, 0.5, 16);
+            const noseMat = new THREE.MeshStandardMaterial({ color: 0xff0000 }); // Bright red nose
+            const nose = new THREE.Mesh(noseGeo, noseMat);
+            nose.position.y = 0.75;
+            group.add(nose);
+
+            // Fins - Bright Red
+            const finGeo = new THREE.BoxGeometry(0.05, 0.4, 0.3);
+            const finMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            for (let i = 0; i < 3; i++) {
+                const finGroup = new THREE.Group();
+                const fin = new THREE.Mesh(finGeo, finMat);
+                fin.position.y = 0.2;
+                fin.position.z = 0.15;
+                finGroup.add(fin);
+                
+                const angle = (i / 3) * Math.PI * 2;
+                finGroup.rotation.y = angle;
+                finGroup.position.y = -0.5;
+                group.add(finGroup);
+            }
+            
+            // Engine Base
+            const engineGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.2, 16);
+            const engineMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+            const engine = new THREE.Mesh(engineGeo, engineMat);
+            engine.position.y = -0.6;
+            group.add(engine);
+
+            // Flame
+            const flameGeo = new THREE.ConeGeometry(0.15, 0.6, 16);
+            const flameMat = new THREE.MeshBasicMaterial({ color: 0xffaa00, transparent: true, opacity: 0.9 });
+            const flame = new THREE.Mesh(flameGeo, flameMat);
+            flame.position.y = -0.9;
+            flame.rotation.x = Math.PI; // Point downwards
+            group.add(flame);
+            group.userData.flame = flame; // save reference for animation
+
+            // Add a small light to the rocket
+            const rocketLight = new THREE.PointLight(0xffaa00, 1.5, 5);
+            rocketLight.position.y = -0.6;
+            group.add(rocketLight);
+
+            return wrapper;
         }
 
         function addBackgroundStars() {
@@ -996,6 +1066,9 @@
         }
 
         function flyToTarget(mesh, data, instant = false) {
+            followedTargetMesh = mesh;
+            lastTargetPosition.copy(mesh.position);
+            
             const pos = mesh.position;
             targetFocus.copy(pos);
 
@@ -1037,6 +1110,36 @@
             }
 
             isAutoNavigating = true;
+
+            // --- ROCKET SHIP LOGIC ---
+            if (!rocketShip) {
+                rocketShip = createRocketShip();
+            }
+            
+            // Ensure animation persists after scene clearing
+            if (!animatableObjects.find(a => a.obj === rocketShip)) {
+                animatableObjects.push({ obj: rocketShip, type: "rotation", speed: 0.02 });
+            }
+
+            // Remove from old parent if any
+            if (rocketShip.parent) {
+                rocketShip.parent.remove(rocketShip);
+            }
+
+            // Add to new target mesh
+            mesh.add(rocketShip);
+
+            // Position it near the surface
+            const radius = (mesh.geometry && mesh.geometry.parameters) ? mesh.geometry.parameters.radius : 1;
+            const offset = radius * 1.5;
+            rocketShip.position.set(offset, 0, 0);
+            
+            // Point the nose away from the planet (vertical axis is Y)
+            rocketShip.rotation.set(0, 0, -Math.PI / 2);
+            
+            // Scale rocket based on planet size
+            const targetScale = Math.max(0.1, radius * 0.15);
+            rocketShip.scale.setScalar(targetScale);
 
             if (instant) {
                 camera.position.copy(targetCameraPos);
@@ -1137,7 +1240,16 @@
 
             animatableObjects.forEach(anim => {
                 if (anim.type === "rotation") {
-                    anim.obj.rotation.y += anim.speed;
+                    if (anim.obj.userData && anim.obj.userData.innerGroup) {
+                        anim.obj.userData.innerGroup.rotation.y += anim.speed;
+                        // pulse the flame
+                        if (anim.obj.userData.innerGroup.userData.flame) {
+                            const scale = 1 + Math.sin(Date.now() * 0.02) * 0.2;
+                            anim.obj.userData.innerGroup.userData.flame.scale.set(1, scale, 1);
+                        }
+                    } else {
+                        anim.obj.rotation.y += anim.speed;
+                    }
                 } else if (anim.type === "orbit") {
                     anim.angle += anim.speed;
                     anim.obj.position.x = Math.cos(anim.angle) * anim.orbitRadius;
@@ -1184,7 +1296,21 @@
                 flightPathLine.computeLineDistances();
             }
 
-            if (isAutoNavigating) {
+            if (followedTargetMesh) {
+                targetFocus.copy(followedTargetMesh.position);
+                const delta = new THREE.Vector3().subVectors(followedTargetMesh.position, lastTargetPosition);
+                
+                if (!isAutoNavigating) {
+                    controls.target.add(delta);
+                    camera.position.add(delta);
+                } else {
+                    targetCameraPos.add(delta);
+                    controls.target.lerp(targetFocus, 0.04);
+                    camera.position.lerp(targetCameraPos, 0.04);
+                    if (camera.position.distanceTo(targetCameraPos) < 0.2) isAutoNavigating = false;
+                }
+                lastTargetPosition.copy(followedTargetMesh.position);
+            } else if (isAutoNavigating) {
                 controls.target.lerp(targetFocus, 0.04);
                 camera.position.lerp(targetCameraPos, 0.04);
                 if (camera.position.distanceTo(targetCameraPos) < 0.2) isAutoNavigating = false;
