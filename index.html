@@ -689,19 +689,26 @@
             nose.position.y = 0.75;
             group.add(nose);
 
-            // Fins - Bright Red
-            const finGeo = new THREE.BoxGeometry(0.05, 0.4, 0.3);
+            // Fins - Small Swept Triangles
+            const finShape = new THREE.Shape();
+            finShape.moveTo(0, 0.1);      // top inner (attached to body)
+            finShape.lineTo(0.25, -0.4);  // bottom outer tip
+            finShape.lineTo(0, -0.3);     // bottom inner (attached to body)
+            finShape.lineTo(0, 0.1);      // close shape
+            
+            const extrudeSettings = { depth: 0.04, bevelEnabled: false };
+            const finGeo = new THREE.ExtrudeGeometry(finShape, extrudeSettings);
+            finGeo.translate(0, 0, -0.02); // Center depth
+            
             const finMat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
             for (let i = 0; i < 3; i++) {
                 const finGroup = new THREE.Group();
                 const fin = new THREE.Mesh(finGeo, finMat);
-                fin.position.y = 0.2;
-                fin.position.z = 0.15;
+                fin.position.x = 0.28; // Push outward so inner edge touches cylinder radius 0.3
                 finGroup.add(fin);
                 
                 const angle = (i / 3) * Math.PI * 2;
                 finGroup.rotation.y = angle;
-                finGroup.position.y = -0.5;
                 group.add(finGroup);
             }
             
@@ -1129,13 +1136,37 @@
             // Add to new target mesh
             mesh.add(rocketShip);
 
-            // Position it near the surface
+            // Position it near the surface, on the flight path connecting to the previous planet
             const radius = (mesh.geometry && mesh.geometry.parameters) ? mesh.geometry.parameters.radius : 1;
-            const offset = radius * 1.5;
-            rocketShip.position.set(offset, 0, 0);
+            const offsetDist = radius * 1.5;
+
+            const offsetDir = new THREE.Vector3(1, 0, 0); // Default pointing right
             
-            // Point the nose away from the planet (vertical axis is Y)
-            rocketShip.rotation.set(0, 0, -Math.PI / 2);
+            if (visitedMeshes && visitedMeshes.length > 0) {
+                const idx = visitedMeshes.indexOf(mesh);
+                let targetPrevPos = null;
+                if (idx > 0) {
+                    targetPrevPos = visitedMeshes[idx - 1].position;
+                } else if (visitedMeshes.length > 1 && idx === -1) {
+                    // Clicked unvisited target, point relative to the last visited path
+                    targetPrevPos = visitedMeshes[visitedMeshes.length - 1].position;
+                }
+                
+                if (targetPrevPos && targetPrevPos.distanceTo(mesh.position) > 0.01) {
+                    // Get global direction FROM the mesh BACK along the incoming flight path
+                    const globalDir = new THREE.Vector3().subVectors(targetPrevPos, mesh.position).normalize();
+                    // Convert to local space of the mesh (since meshes can rotate/orbit)
+                    const worldPoint = new THREE.Vector3().copy(mesh.position).add(globalDir);
+                    mesh.updateMatrixWorld();
+                    offsetDir.copy(mesh.worldToLocal(worldPoint)).normalize();
+                }
+            }
+
+            // Put the rocket exactly on that incoming path line
+            rocketShip.position.copy(offsetDir).multiplyScalar(offsetDist);
+            
+            // Orient the rocket's nose (+Y) backward along that same line (facing where it came from)
+            rocketShip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), offsetDir);
             
             // Scale rocket based on planet size
             const targetScale = Math.max(0.1, radius * 0.15);
